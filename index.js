@@ -1,15 +1,13 @@
+require('dotenv').config()
 const express = require('express')
 const morgan = require('morgan')
-const cors = require('cors')
+
 
 const app = express()
 
 app.use(express.static('dist'))
 
-app.use(cors())
-
 app.use(express.json())
-
 morgan.token('content', function (req, res) { return JSON.stringify(req.body) })
 
 app.use(morgan(function (tokens, req, res) {
@@ -23,100 +21,95 @@ app.use(morgan(function (tokens, req, res) {
     ].join(' ')
   }))
 
-let persons = [
-    { 
-      "id": "1",
-      "name": "Arto Hellas", 
-      "number": "040-123456"
-    },
-    { 
-      "id": "2",
-      "name": "Ada Lovelace", 
-      "number": "39-44-5323523"
-    },
-    { 
-      "id": "3",
-      "name": "Dan Abramov", 
-      "number": "12-43-234345"
-    },
-    { 
-      "id": "4",
-      "name": "Mary Poppendieck", 
-      "number": "39-23-6423122"
-    }
-]
-
+const Listing = require('./models/listing')
 
 app.get('/api/persons', (request,response) => {
-    response.json(persons)
+    Listing.find({}).then(listing=>{
+        response.json(listing)
+    })
 })
 
 
 
 
 app.get('/info',(request, response)=>{
-    const date = (new Date())
-    const str = `<div>Phonebook has info for ${persons.length} people</div>
+    Listing.find({}).then(listing=>{
+        const date = (new Date())
+    const str = `<div>Phonebook has info ${listing.length} for people</div>
                  <div>${date.toString()}</div>`
     console.log(str)
     response.send(str)
-})
-
-app.get('/api/persons/:id', (request,response)=>{
-    const id = request.params.id
-    const person = persons.find(n => n.id===id)
-    
-    if(person){
-        response.json(person)
-    }else{
-        response.status(404).json({
-            error: `person with this id ${id} not found`
-        })
-    }
-})
-
-app.delete('/api/persons/:id',(request, response)=>{
-    const id = request.params.id
-    const person = persons.find(n => n.id===id)
-    if(person){
-        persons = persons.filter(n => n.id!==id)
-        response.status(204).end()
-    }else{
-        response.status(404).end()
-    }
+    })
     
 })
 
-randomInt = (max) =>{
-    return Math.floor(Math.random() * max)
-}
+app.get('/api/persons/:id', (request,response,next)=>{
+    const id = request.params.id
+    Listing.findById(id).then(listing=>{
+        response.json(listing)
+    })
+    .catch(error=> next(error))
+    
+})
 
-app.post('/api/persons',(request,response)=>{
+app.delete('/api/persons/:id',(request, response,next)=>{
+   Listing.findByIdAndDelete(request.params.id)
+    .then(result=>{
+        return response.status(202).end()
+    })
+    .catch(error=> next(error))
+    
+})
+
+app.post('/api/persons',(request,response,next)=>{
     const body = request.body
 
-    if(!body.name){
-        return response.status(400).json(
-            {error: 'the name shoud not be empty'}
-        )
-    }
-    if(!body.number){
-        return response.status(400).json(
-            {error: 'the number shoud not be empty'}
-        )
-    }
-    const finded = persons.find(n => n.name===body.name)
-    if(finded){
-        return response.status(400).json(
-            {error: 'name must be unique'}
-        )
-    }
-    const person = {...body, id : randomInt(1000).toString()}
-    persons = persons.concat(person)
-    response.json(person)
+    
+    const listing = new Listing({
+        name : body.name,
+        number : body.number,
+    })
+
+    listing.save()
+     .then(savedlisting=>{
+        response.json(savedlisting)
+    })
+     .catch(error=>next(error))
 
 })
 
-const PORT = process.env.PORT || 3001
+app.put('/api/persons/:id',(request,response,next)=>{
+
+    const {name,number} = request.body
+    Listing.findById(request.params.id)
+     .then(listing=>{
+        if(!listing){
+            return response.status(404).end()
+        }
+        listing.name=name
+        listing.number = number
+
+        listing.save()
+         .then(result=>{
+            response.json(result)
+         })
+         .catch(error=>next(error))
+     })
+    
+})
+
+const errorHandling = (error,request,response,next)=>{
+    if(error.name==='CastError'){
+        return response.status(400).send({error:'malformed id'})
+    }else if(error.name === 'ValidationError'){
+        return response.status(400).json({error:error.message})
+    }
+    next(error)
+}
+app.use(errorHandling)
+
+
+const PORT = process.env.PORT
 app.listen(PORT,()=>{
     console.log(`Server ruunig on port ${PORT}`)
 })
