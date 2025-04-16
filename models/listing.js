@@ -23,7 +23,7 @@ const phoneSchema = new mongoose.Schema({
                 // Regular expression to validate phone number format
                 return /^\d{2,3}-\d{5,}$/.test(v);
             },
-            message: props => `${props.value} is not a valid phone number!`
+            message: props => `${props.value} is not a valid phone number.`
         },
         required: [true, 'Phone number is required']
     }
